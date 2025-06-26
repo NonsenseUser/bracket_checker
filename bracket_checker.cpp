@@ -1,146 +1,160 @@
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stack>
 #include <string>
-
+#include <vector>
 using namespace std;
+using namespace std::chrono;
 
-// Function to check if a character is an opening bracket
-bool isOpening(string c) {
-  return c == "(" || c == "{" || c == "[" || c == "(*";
-}
+struct Bracket {
+  string type;
+  int line;
+  int pos;
+};
 
 // Function to check if two characters are a matching pair
-bool isMatchingPair(string opening, string closing) {
+bool isMatchingPair(const string &opening, const string &closing) {
   return (opening == "(" && closing == ")") ||
          (opening == "{" && closing == "}") ||
          (opening == "[" && closing == "]") ||
          (opening == "(*" && closing == "*)");
 }
 
-// Function to check if parentheses are balanced in a string
-bool areParenthesesBalanced(const string &expr, ofstream &errorFile,
-                            int lineNumber) {
-  stack<string> s;
-  bool hasError = false;
-
+bool processLine(const string &expr, int lineNumber, stack<Bracket> &s) {
   for (size_t i = 0; i < expr.length(); ++i) {
-    if (i > 0 && expr[i - 1] == '*' && expr[i] == ')') {
+    if (i > 0 && expr[i - 1] == '*' && expr[i] == ')')
       continue;
-    }
-    string c = string(1, expr[i]);
-    string combined = "";
-    if ((i + 1 < expr.length())) {
-      combined = c + expr[i + 1];
-    }
 
+    string c(1, expr[i]);
+    string combined = "";
+    if (i + 1 < expr.length())
+      combined = c + expr[i + 1];
+
+    // Check for opening brackets
     if (combined == "(*") {
-      s.push(combined);
-      i++; // Advance past the second character of "(*"
+      s.push({combined, lineNumber, static_cast<int>(i)});
+      i++;
+      continue;
     } else if (c == "(" || c == "{" || c == "[") {
-      s.push(c);
-    } else if (combined == "*)") {
+      s.push({c, lineNumber, static_cast<int>(i)});
+    }
+    // Check for closing brackets
+    else if (combined == "*)") {
       if (s.empty()) {
-        errorFile << "Line " << lineNumber << ": Error: Closing bracket '"
-                  << combined << "' at position " << i
-                  << " without a matching opening bracket." << endl;
-        errorFile << expr << endl;
-        for (size_t j = 0; j < i; ++j)
-          errorFile << " ";
-        errorFile << "^-- Error here" << endl << endl;
-        hasError = true;
+        cout << "Line " << lineNumber << ": Error: Closing '*)' at position "
+             << i << " without matching opening\n";
+        cout << expr << "\n" << string(i, ' ') << "^\n";
         return false;
       }
-      if (!isMatchingPair(s.top(), combined)) {
-        errorFile << "Line " << lineNumber << ": Error: Mismatched brackets: '"
-                  << s.top() << "' and '" << combined << "' at position " << i
-                  << "." << endl;
-        errorFile << expr << endl;
-        for (size_t j = 0; j < i; ++j)
-          errorFile << " ";
-        errorFile << "^-- Error here" << endl << endl;
-        hasError = true;
-        return false;
-      }
+
+      Bracket top = s.top();
       s.pop();
-      i++; // Advance past the second character of "*)"
+      if (!isMatchingPair(top.type, combined)) {
+        cout << "Line " << lineNumber << ": Mismatch: '" << top.type
+             << "' (line " << top.line << ":" << top.pos
+             << ") vs '*)' at position " << i << "\n";
+        cout << expr << "\n" << string(i, ' ') << "^\n";
+        return false;
+      }
+      i++;
     } else if (c == ")" || c == "}" || c == "]") {
       if (s.empty()) {
-        errorFile << "Line " << lineNumber << ": Error: Closing bracket '" << c
-                  << "' at position " << i
-                  << " without a matching opening bracket." << endl;
-        errorFile << expr << endl;
-        for (size_t j = 0; j < i; ++j)
-          errorFile << " ";
-        errorFile << "^-- Error here" << endl << endl;
-        hasError = true;
+        cout << "Line " << lineNumber << ": Error: Closing '" << c
+             << "' at position " << i << " without opening\n";
+        cout << expr << "\n" << string(i, ' ') << "^\n";
         return false;
       }
 
-      if (!isMatchingPair(s.top(), c)) {
-        errorFile << "Line " << lineNumber << ": Error: Mismatched brackets: '"
-                  << s.top() << "' and '" << c << "' at position " << i << "."
-                  << endl;
-        errorFile << expr << endl;
-        for (size_t j = 0; j < i; ++j)
-          errorFile << " ";
-        errorFile << "^-- Error here" << endl << endl;
-        hasError = true;
+      Bracket top = s.top();
+      s.pop();
+      if (!isMatchingPair(top.type, c)) {
+        cout << "Line " << lineNumber << ": Mismatch: '" << top.type
+             << "' (line " << top.line << ":" << top.pos << ") vs '" << c
+             << "' at position " << i << "\n";
+        cout << expr << "\n" << string(i, ' ') << "^\n";
         return false;
       }
-      s.pop();
     }
   }
-
-  while (!s.empty()) {
-    errorFile << "Line " << lineNumber << ": Error: Unclosed opening bracket '"
-              << s.top() << "'." << endl;
-    errorFile << expr << endl;
-    errorFile << "^-- Unclosed bracket" << endl << endl;
-    s.pop();
-    hasError = true;
-    return false;
-  }
-  return !hasError;
+  return true;
 }
 
 int main() {
-  string filePath;
-  cout << "Enter the path to the file: ";
-  cin >> filePath;
+  vector<string> testFiles = {"random.js",
+                              "palindrom.py",
+                              "machine_learning.py",
+                              "calculator.cpp",
+                              "ceasar_cipher.py",
+                              "database.py",
+                              "guess_game.cpp",
+                              "server.py",
+                              "calculator.js",
+                              "random.js",
+                              "chat.js",
+                              "data_vizualization.py",
+                              "email.py",
+                              "file_integrity.py",
+                              "image.py",
+                              "passwords.py",
+                              "speech.py",
+                              "weather.py",
+                              "backup.sh",
+                              "convert.cs",
+                              "emoji.js",
+                              "formatter.rs",
+                              "game.cpp",
+                              "log_analyzer.go",
+                              "machine_learning_2.py",
+                              "notifications.kt",
+                              "post.py",
+                              "scraper.py",
+                              "stock.js",
+                              "task.sh",
+                              "video.py"};
 
-  ifstream inputFile(filePath);
-  if (!inputFile.is_open()) {
-    cerr << "Error: Unable to open file at path: " << filePath << endl;
-    return 1;
-  }
+  for (const auto &filePath : testFiles) {
 
-  ofstream errorFile("bracket_errors.txt");
-  if (!errorFile.is_open()) {
-    cerr << "Error: Unable to open error file." << endl;
-    return 1;
-  }
-
-  string line;
-  int lineNumber = 1;
-  bool isBalanced = true;
-
-  while (getline(inputFile, line)) {
-    if (!areParenthesesBalanced(line, errorFile, lineNumber)) {
-      isBalanced = false;
+    ifstream inputFile("samples/" + filePath);
+    if (!inputFile) {
+      cerr << "Error opening: " << filePath << "\n";
+      continue;
     }
-    lineNumber++;
-  }
 
-  inputFile.close();
-  errorFile.close();
+    vector<string> lines;
+    string line;
+    while (getline(inputFile, line))
+      lines.push_back(line);
+    inputFile.close();
 
-  if (isBalanced) {
-    cout << "The brackets in the file are balanced." << endl;
-  } else {
-    cout << "The brackets in the file are not balanced. See bracket_errors.txt "
-            "for details."
-         << endl;
+    stack<Bracket> bracketStack;
+    bool hasErrors = false;
+    auto start = high_resolution_clock::now();
+
+    for (size_t i = 0; i < lines.size() && !hasErrors; ++i) {
+      if (!processLine(lines[i], i + 1, bracketStack)) {
+        hasErrors = true;
+      }
+    }
+
+    // Check remaining unclosed brackets
+    if (!hasErrors && !bracketStack.empty()) {
+      hasErrors = true;
+      while (!bracketStack.empty()) {
+        Bracket b = bracketStack.top();
+        cout << "Line " << b.line << ": Unclosed '" << b.type
+             << "' at position " << b.pos << "\n";
+        cout << lines[b.line - 1] << "\n" << string(b.pos, ' ') << "^\n";
+        bracketStack.pop();
+      }
+    }
+
+    auto duration =
+        duration_cast<microseconds>(high_resolution_clock::now() - start);
+
+    cout << "File: " << filePath << " - " << lines.size() << " lines - "
+         << (hasErrors ? "ERRORS FOUND" : "ALL BRACKETS BALANCED")
+         << " (Processed in " << duration.count() << "ms)\n\n";
   }
 
   return 0;
